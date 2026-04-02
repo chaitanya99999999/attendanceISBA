@@ -8,6 +8,7 @@ import {
   where,
   updateDoc,
   doc,
+  deleteDoc,
 } from "firebase/firestore";
 
 export default function App() {
@@ -28,16 +29,28 @@ export default function App() {
     return new Date(year, month, 0).getDate();
   };
 
-  // Fetch data
+  // Fetch students (sorted)
   const fetchStudents = async () => {
     const snapshot = await getDocs(collection(db, "students"));
-    setStudents(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    const data = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    data.sort((a, b) =>
+      a.name.toLowerCase().trim().localeCompare(b.name.toLowerCase().trim()),
+    );
+
+    setStudents(data);
   };
 
   const fetchAttendance = async () => {
     const snapshot = await getDocs(collection(db, "attendance"));
     setAllAttendance(
-      snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })),
     );
   };
 
@@ -48,18 +61,31 @@ export default function App() {
     }
   }, [isUnlocked]);
 
-  // Add students
+  // Add students (no duplicates)
   const addStudent = async () => {
     const names = newStudent
       .split("\n")
       .map((n) => n.trim())
       .filter(Boolean);
 
+    const existingNames = students.map((s) => s.name.toLowerCase());
+
     for (let name of names) {
-      await addDoc(collection(db, "students"), { name });
+      if (!existingNames.includes(name.toLowerCase())) {
+        await addDoc(collection(db, "students"), { name });
+      }
     }
 
     setNewStudent("");
+    fetchStudents();
+  };
+
+  // Delete student
+  const deleteStudent = async (id) => {
+    const confirmDelete = window.confirm("Delete this student?");
+    if (!confirmDelete) return;
+
+    await deleteDoc(doc(db, "students", id));
     fetchStudents();
   };
 
@@ -129,7 +155,6 @@ export default function App() {
       }}
     >
       {!isUnlocked ? (
-        // 🔒 LOCK SCREEN
         <div
           style={{
             height: "80vh",
@@ -146,12 +171,7 @@ export default function App() {
             placeholder="Enter PIN"
             value={pin}
             onChange={(e) => setPin(e.target.value)}
-            style={{
-              padding: 12,
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              marginTop: 10,
-            }}
+            style={{ padding: 12, borderRadius: 10, border: "1px solid #ccc" }}
           />
 
           <button
@@ -165,7 +185,6 @@ export default function App() {
               background: "#111",
               color: "white",
               borderRadius: 10,
-              border: "none",
             }}
           >
             Unlock
@@ -173,7 +192,6 @@ export default function App() {
         </div>
       ) : (
         <>
-          {/* HEADER */}
           <div style={{ textAlign: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 18, color: "#64748b" }}>ISBA</div>
             <div style={{ fontSize: 32, fontWeight: "700" }}>Attendance</div>
@@ -194,13 +212,7 @@ export default function App() {
               value={newStudent}
               onChange={(e) => setNewStudent(e.target.value)}
               placeholder="Enter names (one per line)"
-              style={{
-                width: "100%",
-                height: 100,
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid #ddd",
-              }}
+              style={{ width: "100%", height: 100, padding: 10 }}
             />
 
             <button
@@ -211,7 +223,6 @@ export default function App() {
                 padding: 12,
                 background: "#4CAF50",
                 color: "white",
-                border: "none",
                 borderRadius: 10,
               }}
             >
@@ -236,15 +247,33 @@ export default function App() {
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  padding: "10px 0",
+                  alignItems: "center",
+                  padding: "8px 0",
                 }}
               >
                 <span>{s.name}</span>
-                <input
-                  type="checkbox"
-                  checked={attendance[s.id] || false}
-                  onChange={() => toggleAttendance(s.id)}
-                />
+
+                <div style={{ display: "flex", gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={attendance[s.id] || false}
+                    onChange={() => toggleAttendance(s.id)}
+                  />
+
+                  <button
+                    onClick={() => deleteStudent(s.id)}
+                    style={{
+                      background: "#ef4444",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 6,
+                      padding: "4px 8px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
             ))}
 
@@ -256,7 +285,6 @@ export default function App() {
                 padding: 14,
                 background: "#2196F3",
                 color: "white",
-                border: "none",
                 borderRadius: 10,
               }}
             >
@@ -308,7 +336,7 @@ export default function App() {
                     ✔ {stats.presentDays.length} days
                   </div>
 
-                  <div style={{ color: "#dc2626", fontSize: 14 }}>
+                  <div style={{ color: "#dc2626" }}>
                     ❌ {stats.absentDays.length} days
                   </div>
                 </div>
@@ -333,8 +361,6 @@ export default function App() {
                     padding: 20,
                     borderTopLeftRadius: 20,
                     borderTopRightRadius: 20,
-                    maxHeight: "60vh",
-                    overflowY: "auto",
                   }}
                 >
                   <h3 style={{ textAlign: "center" }}>
@@ -346,7 +372,7 @@ export default function App() {
                       display: "grid",
                       gridTemplateColumns: "repeat(7, 1fr)",
                       gap: 8,
-                      marginTop: 15,
+                      marginTop: 10,
                     }}
                   >
                     {Array.from({ length: totalDays }, (_, i) => {
@@ -359,8 +385,8 @@ export default function App() {
                           key={day}
                           style={{
                             padding: 10,
-                            borderRadius: 8,
                             textAlign: "center",
+                            borderRadius: 8,
                             background: isPresent
                               ? "#dcfce7"
                               : isAbsent
@@ -377,7 +403,7 @@ export default function App() {
                   <button
                     onClick={() => setSelectedStudent(null)}
                     style={{
-                      marginTop: 15,
+                      marginTop: 10,
                       width: "100%",
                       padding: 12,
                       background: "#111",
